@@ -1,1 +1,170 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 600px;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+
+        header {
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #555;
+        }
+
+        .input-section {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        input {
+            width: 80%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 1.1em;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .video-details {
+            margin-top: 20px;
+        }
+
+        .video-details.hidden {
+            display: none;
+        }
+
+        #videoThumbnail {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+
+        .buttons button {
+            width: 48%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>YouTube Video Downloader</h1>
+            <p>Download YouTube videos in MP4 or MP3 format.</p>
+        </header>
+
+        <div class="input-section">
+            <label for="videoUrl">Enter YouTube Video URL</label>
+            <input type="text" id="videoUrl" placeholder="Paste YouTube video URL here">
+            <button onclick="fetchVideoDetails()">Get Video Info</button>
+        </div>
+
+        <div id="videoDetails" class="video-details hidden">
+            <h2>Video Details</h2>
+            <p id="videoTitle"></p>
+            <p id="videoSize"></p>
+            <img id="videoThumbnail" alt="Video Thumbnail" />
+
+            <div class="buttons">
+                <button id="downloadMp4" onclick="downloadVideo('mp4')">Download MP4</button>
+                <button id="downloadMp3" onclick="downloadVideo('mp3')">Download MP3</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchVideoDetails() {
+            const videoUrl = document.getElementById('videoUrl').value;
+            const videoDetailsElement = document.getElementById('videoDetails');
+            const videoTitleElement = document.getElementById('videoTitle');
+            const videoSizeElement = document.getElementById('videoSize');
+            const videoThumbnailElement = document.getElementById('videoThumbnail');
+            const downloadMp4Button = document.getElementById('downloadMp4');
+            const downloadMp3Button = document.getElementById('downloadMp3');
+
+            if (!videoUrl) {
+                alert("Please enter a YouTube video URL.");
+                return;
+            }
+
+            // Make API call to the backend server
+            try {
+                const response = await fetch(`/api/info?url=${encodeURIComponent(videoUrl)}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                // Set video details
+                videoTitleElement.textContent = `Title: ${data.title}`;
+                videoSizeElement.textContent = `Size: ${data.size} MB`;
+                videoThumbnailElement.src = data.thumbnail;
+
+                // Show video details section
+                videoDetailsElement.classList.remove('hidden');
+
+                // Update download buttons with the video URLs
+                downloadMp4Button.onclick = () => downloadVideo('video', data.url);
+                downloadMp3Button.onclick = () => downloadVideo('audio', data.url);
+            } catch (error) {
+                alert("Error fetching video details.");
+            }
+        }
+
+        function downloadVideo(format, url) {
+            const downloadLink = document.createElement('a');
+            downloadLink.href = url;
+            downloadLink.download = `download.${format}`;
+            downloadLink.click();
+        }
+    </script>
+</body>
+</html>
