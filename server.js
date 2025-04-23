@@ -1,91 +1,95 @@
 const express = require('express');
+const cors = require('cors');
 const ytdl = require('ytdl-core');
-const path = require('path');
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
-// Serve static files (index.html and other static assets)
+app.use(cors());
 app.use(express.static('public'));
 
-// API route to fetch video info (title, size, thumbnail)
+function normalizeYouTubeURL(url) {
+  try {
+    const parsed = new URL(url);
+
+    if (parsed.hostname === 'youtu.be') {
+      const id = parsed.pathname.split('/')[1];
+      return `https://www.youtube.com/watch?v=${id}`;
+    }
+
+    if (parsed.hostname === 'm.youtube.com') {
+      parsed.hostname = 'www.youtube.com';
+    }
+
+    if (parsed.pathname.includes('/shorts/')) {
+      const id = parsed.pathname.split('/shorts/')[1].split(/[/?&]/)[0];
+      return `https://www.youtube.com/watch?v=${id}`;
+    }
+
+    return parsed.href;
+  } catch (err) {
+    return null;
+  }
+}
+
 app.get('/api/info', async (req, res) => {
-    const url = req.query.url;
+  const { url } = req.query;
 
-    if (!url) {
-        return res.json({ error: 'No URL provided' });
-    }
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required' });
+  }
 
-    try {
-        const info = await ytdl.getInfo(url);
-        const videoDetails = {
-            title: info.videoDetails.title,
-            size: (info.formats[0].contentLength / 1024 / 1024).toFixed(2), // Size in MB
-            thumbnail: info.videoDetails.thumbnails[0].url,
-            mp4Url: info.formats.find(format => format.container === 'mp4' && format.qualityLabel).url, // URL for MP4
-            mp3Url: info.formats.find(format => format.container === 'mp4' && format.audioEncoding).url // URL for MP3 (audio-only stream)
-        };
+  const normalizedUrl = normalizeYouTubeURL(url);
+  if (!normalizedUrl || !ytdl.validateURL(normalizedUrl)) {
+    return res.status(400).json({ error: 'Invalid YouTube URL' });
+  }
 
-        res.json(videoDetails);
-    } catch (err) {
-        console.error(err);
-        res.json({ error: 'Failed to fetch video details' });
-    }
+  try {
+    const info = await ytdl.getInfo(normalizedUrl);
+    const title = info.videoDetails.title;
+    const videoId = info.videoDetails.videoId;
+    const thumbnail = info.videoDetails.thumbnails.at(-1).url;
+
+    res.json({
+      title,
+      thumbnail,
+      videoId,
+    });
+  } catch (err) {
+    console.error('Error fetching video info:', err);
+    res.status(500).json({ error: 'Failed to fetch video details' });
+  }
 });
 
-// API route to handle downloading the video (MP4)
-app.get('/download/mp4', async (req, res) => {
-    const videoUrl = req.query.url;
+app.get('/api/download', async (req, res) => {
+  const { url, format } = req.query;
+  const normalizedUrl = normalizeYouTubeURL(url);
 
-    if (!videoUrl) {
-        return res.status(400).send('URL is required');
-    }
+  if (!normalizedUrl || !ytdl.validateURL(normalizedUrl)) {
+    return res.status(400).json({ error: 'Invalid YouTube URL' });
+  }
 
-    try {
-        const info = await ytdl.getInfo(videoUrl);
-        const mp4Url = info.formats.find(format => format.container === 'mp4' && format.qualityLabel);
-        
-        if (!mp4Url) {
-            return res.status(404).send('MP4 format not available');
-        }
+  try {
+    const info = await ytdl.getInfo(normalizedUrl);
+    const title = info.videoDetails.title.replace(/[^\w\s]/gi, '');
 
-        res.header('Content-Disposition', 'attachment; filename="video.mp4"');
-        ytdl(videoUrl, { format: mp4Url }).pipe(res);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Error downloading video');
-    }
+    const filter =
+      format === 'audio' ? 'audioonly' : 'videoandaudio';
+
+    res.header(
+      'Content-Disposition',
+      `attachment; filename="${title}.${format === 'audio' ? 'mp3' : 'mp4'}"`
+    );
+
+    ytdl(normalizedUrl, {
+      filter,
+      quality: 'highest',
+    }).pipe(res);
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).json({ error: 'Download failed' });
+  }
 });
 
-// API route to handle downloading the audio (MP3)
-app.get('/download/mp3', async (req, res) => {
-    const videoUrl = req.query.url;
-
-    if (!videoUrl) {
-        return res.status(400).send('URL is required');
-    }
-
-    try {
-        const info = await ytdl.getInfo(videoUrl);
-        const mp3Url = info.formats.find(format => format.container === 'mp4' && format.audioEncoding);
-
-        if (!mp3Url) {
-            return res.status(404).send('MP3 format not available');
-        }
-
-        res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
-        ytdl(videoUrl, { format: mp3Url }).pipe(res);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Error downloading audio');
-    }
-});
-
-// Home route (serves the index.html)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
